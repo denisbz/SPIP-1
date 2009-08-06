@@ -77,6 +77,13 @@ OR (@file_exists($f = _DIR_RACINE . _NOM_PERMANENTS_INACCESSIBLES . _NOM_CONFIG 
 
 // *** Fin des define *** //
 
+
+// Inclure l'ecran de securite
+if (!defined('_ECRAN_SECURITE')
+AND @file_exists($f = _DIR_RACINE . _NOM_PERMANENTS_INACCESSIBLES . 'ecran_securite.php'))
+	include $f;
+
+
 //
 // *** Parametrage par defaut de SPIP ***
 //
@@ -244,6 +251,8 @@ $spip_pipeline = array(
 	'affiche_droite' => '',
 	'affiche_gauche' => '',
 	'affiche_milieu' => '',
+	'affiche_enfants' => '',
+	'affiche_hierarchie' => '',
 	'boite_infos' => 'f_boite_infos',
 	'ajouter_boutons' => '',
 	'ajouter_onglets' => '',
@@ -295,12 +304,9 @@ $spip_pipeline = array(
 	'rechercher_liste_des_jointures' => '',
 	'recuperer_fond' => '',
 	'styliser' => '',
+	'trig_calculer_prochain_postdate' => '',
 	'trig_propager_les_secteurs' => '',
 );
-
-# pour activer #INSERT_HEAD sur tous les squelettes, qu'ils aient ou non
-# la balise, decommenter la ligne ci-dessous (+ supprimer tmp/charger_pipelines)
-# $spip_pipeline['affichage_final'] .= '|f_insert_head';
 
 # la matrice standard (fichiers definissant les fonctions a inclure)
 $spip_matrice = array ();
@@ -359,12 +365,12 @@ $liste_des_authentifications = array(
 // numero de branche, utilise par les plugins 
 // pour specifier les versions de SPIP necessaire
 // il faut s'en tenir a un nombre de decimales fixe ex : 2.0.0, 2.0.0-dev, 2.0.0-beta, 2.0.0-beta2 
-$spip_version_branche = "2.0.8";
+$spip_version_branche = "2.0.9";
 // version des signatures de fonctions PHP
 // (= numero SVN de leur derniere modif cassant la compatibilite et/ou necessitant un recalcul des squelettes)
 $spip_version_code = 12691;
 // version de la base SQL (= numero SVN de sa derniere modif, a verifier dans le fichier ecrire/maj/sv10000.php) 
-$spip_version_base = 13833;
+$spip_version_base = 14272;
 
 // version de l'interface a la base
 $spip_sql_version = 1;

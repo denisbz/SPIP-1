@@ -60,7 +60,7 @@ function formulaires_login_charger_dist($cible="",$login="",$prive=null)
 	// si on en a le droit, et sauf si on y est deja
 
 	if (!$valeurs['editable'] AND $loge) {
-		if (!strlen($cible) OR $cible == self())
+		if (!strlen($cible) OR quote_amp($cible) == self())
 			$valeurs['editable'] = false;
 		else {
 			include_spip('inc/headers');
@@ -194,6 +194,9 @@ function formulaires_login_traiter_dist($cible="",$login="",$prive=null){
 	if (is_null($prive) ? is_url_prive($cible) : $prive) {
 		$cible = parametre_url($cible, 'bonjour', 'oui', '&');
 	}
+	if ($cible=='@page_auteur')
+		$cible = generer_url_entite($GLOBALS['auteur_session']['id_auteur'],'auteur');
+
 	if ($cible) {
 		$cible = parametre_url($cible, 'var_login', '', '&');
 	} 

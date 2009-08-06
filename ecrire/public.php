@@ -40,7 +40,11 @@ if (isset($GLOBALS['_INC_PUBLIC'])) {
 		$fond = $_GET[_SPIP_PAGE];
 
 		// Securite
-		if (strstr($fond, '/')) {
+		if (strstr($fond, '/')
+			AND !(
+				isset($GLOBALS['visiteur_session']) // pour eviter d'evaluer la suite pour les anonymes
+				AND include_spip('inc/autoriser')
+				AND autoriser('webmestre'))) {
 			include_spip('inc/minipres');
 			echo minipres();
 			exit;
@@ -138,10 +142,14 @@ if (isset($GLOBALS['_INC_PUBLIC'])) {
 			$pos = strlen($page['texte']);
 		$page['texte'] = substr_replace($page['texte'], $x, $pos, 0);
 	}
-
 	// est-on admin ?
 	if ($affiche_boutons_admin = (
-	isset($_COOKIE['spip_admin']) 
+	  (isset($_COOKIE['spip_admin'])
+	  OR
+		(isset($GLOBALS['visiteur_session']['id_auteur']) AND include_spip('inc/autoriser') AND autoriser('debug'))
+		OR
+		(defined('_DEBUG_ANONYME') AND _DEBUG_ANONYME)
+	)
 	AND !$flag_preserver
 	AND ($html OR ($var_mode == 'debug') OR count($tableau_des_erreurs))
 	))

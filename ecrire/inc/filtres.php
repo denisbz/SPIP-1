@@ -74,7 +74,35 @@ function filtre_text_csv_dist($t)
 	}
 	// si premiere colonne vide, le raccourci doit quand meme produire <th...
 	if ($entete[0] == $sep) $entete = ' ' . $entete;
-	if ($corps[strlen($corps)-1] <> "\n") $corps .= "\n";
+
+	$lignes = split("\n", $corps);
+	// retrait des lignes vides finales
+	while(preg_match("/^$sep*$/", $lignes[count($lignes)-1]))
+	  unset($lignes[count($lignes)-1]);
+	//  calcul du  nombre de colonne a chaque ligne
+	$nbcols = array();
+	$max = $mil = substr_count($entete, $sep);
+	foreach($lignes as $k=>$v) {
+	  if ($max <> ($nbcols[$k]= substr_count($v, $sep))) {
+	    if ($max > $nbcols[$k])
+	      $mil = $nbcols[$k];
+	    else { $mil = $max; $max = $nbcols[$k];}
+	  }
+	}
+	// Si pas le meme nombre, cadrer au nombre max
+	if ($mil <> $max)
+	  foreach($nbcols as $k=>$v) {
+	    if ($v < $max) $lignes[$k].= str_repeat($sep, $max-$v);
+	    }
+	// et retirer les colonnes integralement vides
+	while(true) {
+	  $nbcols =  ($entete[strlen($entete)-1]===$sep);
+	  foreach($lignes as $v) $nbcols &= ($v[strlen($v)-1]===$sep);
+	  if (!$nbcols) break;
+	  $entete = substr($entete,0,-1);
+	  foreach($lignes as $k=>$v) $lignes[$k] = substr($v,0,-1);
+	}
+	$corps = join("\n", $lignes) . "\n";
 	return propre($caption .
 		"\n|{{" .
 		str_replace($sep,'}}|{{',$entete) .
@@ -291,7 +319,7 @@ function image_bg ($img, $couleur, $pos="") {
 	if (!function_exists("imagecreatetruecolor")
 		OR !($image = image_aplatir(image_sepia($img, $couleur),"gif","cccccc", 64, true))
 	)
-		return "background-color: #$couleur;";
+		return $couleur ? "background-color: #$couleur;" : '';
 	include_spip('inc/filtres_images_etendus');
 	return "background: url(".url_absolue(extraire_attribut($image, "src")).") $pos;";
 }
@@ -1282,7 +1310,14 @@ function extra($letexte, $champ) {
 function post_autobr($texte, $delim="\n_ ") {
 	$texte = str_replace("\r\n", "\r", $texte);
 	$texte = str_replace("\r", "\n", $texte);
+
+	if (preg_match(",\n+$,", $texte, $fin))
+		$texte = substr($texte, 0, -strlen($fin = $fin[0]));
+	else
+		$fin = '';
+
 	$texte = echappe_html($texte, '', true);
+
 
 	$debut = '';
 	$suite = $texte;
@@ -1290,9 +1325,11 @@ function post_autobr($texte, $delim="\n_ ") {
 		$debut .= substr($suite, 0, $t-1);
 		$suite = substr($suite, $t);
 		$car = substr($suite, 0, 1);
-		if (($car<>'-') AND ($car<>'_') AND ($car<>"\n") AND ($car<>"|"))
+		if (($car<>'-') AND ($car<>'_') AND ($car<>"\n") AND ($car<>"|") AND ($car<>"}")
+		AND !preg_match(',^\s*(\n|</?(quote|div)|$),S',($suite))
+		AND !preg_match(',</?(quote|div)> *$,iS', $debut)) {
 			$debut .= $delim;
-		else
+		} else
 			$debut .= "\n";
 		if (preg_match(",^\n+,", $suite, $regs)) {
 			$debut.=$regs[0];
@@ -1302,7 +1339,7 @@ function post_autobr($texte, $delim="\n_ ") {
 	$texte = $debut.$suite;
 
 	$texte = echappe_retour($texte);
-	return $texte;
+	return $texte.$fin;
 }
 
 
@@ -1735,44 +1772,60 @@ function regledetrois($a,$b,$c)
 // Fournit la suite de Input-Hidden correspondant aux parametres de
 // l'URL donnee en argument
 // Compatible avec les type_url depuis [13939].
+// cf. tests/filtres/form_hidden.html
 // http://doc.spip.org/@form_hidden
 function form_hidden($action) {
-	$hidden = array();
 	$contexte = array();
 	if (!strpos($action, 'page=')
 	AND $renommer = generer_url_entite()
-	AND $p = $renommer($action, $contexte)) {
-
+	AND $p = $renommer($action, $contexte)
+	AND $p[3]) {
 		$contexte = $p[0];
 		$contexte['page'] = $p[3];
-		$action = preg_replace('/[?][^&]*/', '', $action);
+		$action = preg_replace('/^([^?]*)[?][^&]*/', '\1', $action);
 	}
+
+	// on va remplir un tableau de valeurs en prenant bien soin de ne pas
+	// ecraser les elements de la forme mots[]=1&mots[]=2
+	$values = array();
+
+	// d'abord avec celles de l'url
 	if (false !== ($p = strpos($action, '?'))) {
 		foreach(preg_split('/&(amp;)?/S',substr($action,$p+1)) as $c){
 			list($var,$val) = explode('=', $c, 2);
-			if ($var) $contexte[$var] = $val;
+			if ($var) {
+				$val =  rawurldecode($val);
+				if (preg_match(',\[\]$,S', $var))
+					$values[] = array($var, $val);
+				else if (!isset($values[$var]))
+					$values[$var] = array($var, $val);
+			}
 		}
 	}
-	foreach($contexte as $var => $val) {
-		$input = '<input name="'
+
+	// ensuite avec celles du contexte, sans doublonner !
+	foreach($contexte as $var=>$val)
+		if (preg_match(',\[\]$,S', $var))
+			$values[] = array($var, $val);
+		else if (!isset($values[$var]))
+			$values[$var] = array($var, $val);
+
+	// puis on rassemble le tout
+	$hidden = array();
+	foreach($values as $value) {
+		list($var,$val) = $value;
+		$hidden[] = '<input name="'
 			. entites_html($var)
 			.'"'
 			. (is_null($val)
 				? ''
-				: ' value="'.entites_html(rawurldecode($val)).'"'
+				: ' value="'.entites_html($val).'"'
 				)
 			. ' type="hidden" />';
-
-		// si c'est une variable de la forme a[]=2, cumuler les input
-		// sinon ne conserver que le premier
-		if (preg_match(',\[\]$,S', $var))
-			$hidden[] = $input;
-		else
-			if (!isset($hidden[$var]))
-				$hidden[$var] = $input;
 	}
 	return join("\n", $hidden);
 }
+
 
 // http://doc.spip.org/@filtre_bornes_pagination_dist
 function filtre_bornes_pagination_dist($courante, $nombre, $max = 10) {
@@ -2613,5 +2666,40 @@ function _xor($message, $key=null){
 
 	return $message;
 }
+
+
+/**
+ * filtre explode pour les squelettes permettant d'ecrire
+ * #GET{truc}|explode{-}
+ *
+ * @param strong $a
+ * @param string $b
+ * @return array
+ */
+function filtre_explode_dist($a,$b){return explode($b,$a);}
+
+/**
+ * filtre implode pour les squelettes permettant d'ecrire
+ * #GET{truc}|implode{-}
+ *
+ * @param array $a
+ * @param string $b
+ * @return string
+ */
+function filtre_implode_dist($a,$b){return implode($b,$a);}
+
+/*
+ * Deux verrues pour que le pipeline de revisions soit correct
+ * elles vont sauter quand ca passera en plugin
+ */
+function premiere_revision($x) {
+	include_spip('inc/revisions');
+	return enregistrer_premiere_revision($x);
+}
+function nouvelle_revision($x) {
+	include_spip('inc/revisions');
+	return enregistrer_nouvelle_revision($x);
+}
+
 
 ?>

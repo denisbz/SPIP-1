@@ -39,34 +39,70 @@ include_spip('public/balises');
 // Gestion des jointures
 include_spip('public/jointures');
 
+// Les 2 ecritures INCLURE{A1,A2,A3...} et INCLURE(A1){A2}{A3}... sont admises
+// Preferer la premiere.
+// Les Ai sont de la forme Vi=Ei ou bien Vi qui veut alors dire Vi=Vi
+// Le resultat est un tableau indexe par les Vi
+// Toutefois, si le premier argument n'est pas de la forme Vi=Ei
+// il est conventionnellement la valeur de l'index 1.
+// Voir la balise #INCLURE
+
 // http://doc.spip.org/@argumenter_inclure
-function argumenter_inclure($struct, $descr, &$boucles, $id_boucle, $echap=true	, $lang = ''){
+function argumenter_inclure($params, $rejet_filtres, $descr, &$boucles, $id_boucle, $echap=true	, $lang = ''){
 	$l = array();
 
-	foreach($struct->param as $val) {
-		$var = array_shift($val);
-		if ($var == 'lang') {
-			$lang = $val;
-		} else
-			$l[$var] = ($echap?"\'$var\' => ' . argumenter_squelette(":"'$var' => ")  .
-			($val
-				? calculer_liste($val[0], $descr, $boucles, $id_boucle)
-				: index_pile($id_boucle, $var, $boucles)
-			) . ($echap?") . '":" ");
+	foreach($params as $k => $couple) {
+	// la liste d'arguments d'inclusion peut se terminer par un filtre
+		$filtre = array_shift($couple);
+		if ($filtre) break;
+		foreach($couple as $n => $val) {
+			$var = $val[0];
+			if ($var->type != 'texte') {
+			  if ($n OR $k)
+				erreur_squelette(_T('zbug_parametres_inclus_incorrects'), $id_boucle);
+			  else $l[1] = calculer_liste($val, $descr, $boucles, $id_boucle);
+			  break;
+			} else {
+				preg_match(",^([^=]*)(=?)(.*)$,", $var->texte,$m);
+				$var = $m[1];
+				$auto = false;;
+				if ($m[2]) {
+				  $v = $m[3];
+				  if (preg_match(',^[\'"](.*)[\'"]$,', $v, $m)) $v = $m[1];
+				  $val[0]->texte = $v;
+				} elseif ($k OR $n) {
+				  $auto = true;
+				} else $var = 1;
+
+
+				if ($var == 'lang') {
+				  $lang = !$auto 
+				    ? calculer_liste($val, $descr, $boucles, $id_boucle)
+				    : '$GLOBALS["spip_lang"]';
+				} else {
+				  $val = $auto
+				    ? index_pile($id_boucle, $var, $boucles)
+				    : calculer_liste($val, $descr, $boucles, $id_boucle);
+
+				  if ($var !== 1)
+				    $val = ($echap?"\'$var\' => ' . argumenter_squelette(":"'$var' => ")
+				    . $val . ($echap? ") . '":" ");
+				  else $val = $echap ? "'.$val.'" : $val;
+				  $l[$var] = $val;
+				}
+			}
+		}
 	}
+
 	// Cas particulier de la langue : si {lang=xx} est definie, on
 	// la passe, sinon on passe la langue courante au moment du calcul
 	// sauf si on n'en veut pas 
 	if ($lang === false) return $l;
+	if (!$lang) $lang = '$GLOBALS["spip_lang"]';
+	$l['lang'] = ($echap?"\'lang\' => ' . argumenter_squelette(":"'lang' => ")  . $lang . ($echap?") . '":" ");
 
-	$l['lang'] = ($echap?"\'lang\' => ' . argumenter_squelette(":"'lang' => ")  .
-		($lang
-			? calculer_liste($lang[0], $descr, $boucles, $id_boucle)
-			: '$GLOBALS["spip_lang"]'
-			) . ($echap?") . '":" ");
 	return $l;
 }
-
 //
 // Calculer un <INCLURE()>
 //
@@ -94,7 +130,7 @@ function calculer_inclure($p, $descr, &$boucles, $id_boucle) {
 		}
 	}
 
-	$_contexte = argumenter_inclure($p, $descr, $boucles, $id_boucle);
+	$_contexte = argumenter_inclure($p->param, false, $descr, $boucles, $id_boucle);
 
 	// Critere d'inclusion {env} (et {self} pour compatibilite ascendante)
 	if ($env = (isset($_contexte['env'])|| isset($_contexte['self']))) {
@@ -244,7 +280,7 @@ function calculer_boucle_nonrec($id_boucle, &$boucles) {
 
 		$corps .= 
 		  (($boucle->lang_select != 'oui') ? 
-			"\t\tif (!\$GLOBALS['forcer_lang'])\n\t " : '')
+			"\t\tif (!(isset(\$GLOBALS['forcer_lang']) AND \$GLOBALS['forcer_lang']))\n\t " : '')
 		  . "\t\tif (\$x = "
 		  . index_pile($id_boucle, 'lang', $boucles)
 		  . ') $GLOBALS["spip_lang"] = $x;';
@@ -549,6 +585,7 @@ function calculer_liste($tableau, $descr, &$boucles, $id_boucle='') {
 
 define('_REGEXP_COND_VIDE_NONVIDE',"/^[(](.*)[?]\s*''\s*:\s*('[^']+')\s*[)]$/");
 define('_REGEXP_COND_NONVIDE_VIDE',"/^[(](.*)[?]\s*('[^']+')\s*:\s*''\s*[)]$/");
+define('_REGEXP_CONCAT_NON_VIDE', "/^(.*)[.]\s*'[^']+'\s*$/");
 
 // http://doc.spip.org/@compile_cas
 function compile_cas($tableau, $descr, &$boucles, $id_boucle) {
@@ -669,8 +706,10 @@ function compile_cas($tableau, $descr, &$boucles, $id_boucle) {
 			AND $code[0]!= "'"
 #			AND (strpos($code,'interdire_scripts') !== 0)
 			AND !preg_match(_REGEXP_COND_VIDE_NONVIDE, $code)
-			AND !preg_match(_REGEXP_COND_NONVIDE_VIDE, $code))
+			AND !preg_match(_REGEXP_COND_NONVIDE_VIDE, $code)
+			AND !preg_match(_REGEXP_CONCAT_NON_VIDE, $code)) {
 				$code = "strval($code)";
+			}
 			break;
 
 		default: 
@@ -700,7 +739,10 @@ function compile_retour($code, $avant, $apres, $altern, $tab, $n)
 	if ($apres == "''") $apres = '';
 	if (!$avant AND !$apres AND ($altern==="''")) return $code;
 
-	if (preg_match(_REGEXP_COND_VIDE_NONVIDE,$code, $r)) {
+	if (preg_match(_REGEXP_CONCAT_NON_VIDE, $code)) {
+		$t = $code;
+		$cond = '';
+	} elseif (preg_match(_REGEXP_COND_VIDE_NONVIDE,$code, $r)) {
 		$t = $r[2];
 		$cond =  '!' . $r[1];
 	} else if  (preg_match(_REGEXP_COND_NONVIDE_VIDE,$code, $r)) {
@@ -716,7 +758,7 @@ function compile_retour($code, $avant, $apres, $altern, $tab, $n)
 		(!$apres ? "" : " . $apres");
 
 	if ($res !== $t) $res = "($res)";
-	return "($cond ?\n\t$tab$res :\n\t$tab$altern)";
+	return !$cond ? $res : "($cond ?\n\t$tab$res :\n\t$tab$altern)";
 }
 
 
@@ -785,18 +827,14 @@ function public_compiler_dist($squelette, $nom, $gram, $sourcefile, $connect='')
 	// Pre-traitement : reperer le charset du squelette, et le convertir
 	// Bonus : supprime le BOM
 	include_spip('inc/charsets');
-	$squelette = transcoder_page($squelette);
-
-	// Informations sur le squelette
-	$descr = array('nom' => $nom, 'sourcefile' => $sourcefile,
-		'squelette' => $squelette);
-	unset($squelette);
+	$descr = array('nom' => $nom,
+		       'sourcefile' => $sourcefile,
+		       'squelette' => transcoder_page($squelette));
 
 	// Phraser le squelette, selon sa grammaire
 	// pour le moment: "html" seul connu (HTML+balises BOUCLE)
 	$boucles = array();
 	spip_timer('calcul_skel');
-
 
 	$f = charger_fonction('phraser_'.$gram, 'public');
 

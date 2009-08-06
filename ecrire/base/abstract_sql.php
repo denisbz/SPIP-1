@@ -16,14 +16,14 @@ define('sql_ABSTRACT_VERSION', 1);
 
 // Ce fichier definit la couche d'abstraction entre SPIP et ses serveurs SQL.
 // Cette version 1 est un ensemble de fonctions ecrites rapidement
-// pour generaliser le code strictement MySQL de SPIP < 1.9.3.
+// pour generaliser le code strictement MySQL de SPIP <= 1.9.2
 // Des retouches sont a prevoir apres l'experience des premiers portages.
 // Les symboles sql_* (constantes et nom de fonctions) sont reserves
 // a cette interface, sans quoi le gestionnaire de version dysfonctionnera.
 
 // Fonction principale. Elle charge l'interface au serveur de base de donnees
 // via la fonction spip_connect_version qui etablira la connexion au besoin.
-// Elle retourne la fonction produisant la requête SQL demandee
+// Elle retourne la fonction produisant la requete SQL demandee
 // Erreur fatale si la fonctionnalite est absente sauf si le 3e arg <> false
 
 // http://doc.spip.org/@sql_serveur
@@ -57,9 +57,9 @@ function sql_set_charset($charset,$serveur='', $option=true){
 
 // Fonction pour SELECT, retournant la ressource interrogeable par sql_fetch.
 // Recoit en argument:
-// - le tableau (ou chaîne) des champs a` ramener (Select)
-// - le tableau (ou chaîne) des tables a` consulter (From)
-// - le tableau (ou chaîne) des conditions a` remplir (Where)
+// - le tableau (ou chaï¿½ne) des champs a` ramener (Select)
+// - le tableau (ou chaï¿½ne) des tables a` consulter (From)
+// - le tableau (ou chaï¿½ne) des conditions a` remplir (Where)
 // - le crite`re de regroupement (Group by)
 // - le tableau de classement (Order By)
 // - le crite`re de limite (Limit)
@@ -407,18 +407,17 @@ function sql_hex($val, $serveur='', $option=true)
 	return $f($val);
 }
 
-// http://doc.spip.org/@sql_quote
-function sql_quote($val, $serveur='', $option=true)
+function sql_quote($val, $serveur='', $type='')
 {
 	$f = sql_serveur('quote', $serveur, true);
 	if (!is_string($f) OR !$f) $f = '_q';
-	return $f($val);
+	return $f($val, $type);
 }
 
-// http://doc.spip.org/@sql_in
+
 function sql_in($val, $valeurs, $not='', $serveur='', $option=true) {
 	if (is_array($valeurs)) {
-		$f = sql_serveur('quote', $serveur,  $option==='continue' OR $option===false);
+		$f = sql_serveur('quote', $serveur, true);
 		if (!is_string($f) OR !$f) return false;
 		$valeurs = join(',', array_map($f, array_unique($valeurs)));
 	} elseif ($valeurs[0]===',') $valeurs = substr($valeurs,1);
@@ -478,5 +477,12 @@ function description_table($nom){
 	if (!$f) $f = charger_fonction('trouver_table', 'base');
 	return $f($nom);
 }
+
+
+if(!function_exists("ctype_xdigit")){
+    function ctype_xdigit($string = ""){
+        return !strlen(  trim( $string,  "1234567890abcdefABCDEF" )  );
+    }/* endfunction ctype_xdigit */
+}/* endif not function_exists ctype_xdigit */
 
 ?>

@@ -95,7 +95,7 @@ function definir_puce() {
 	if (!isset($GLOBALS[$p])) {
 		$img = find_in_path($p.'.gif');
 		list(,,,$size) = @getimagesize($img);
-		$GLOBALS[$p] = '<img src="'.$img.'" '.$size.' alt="-" />';
+		$GLOBALS[$p] = '<img src="'.$img.'" '.$size.' class="puce" alt="-" />';
 	}
 	return $GLOBALS[$p];
 }
@@ -203,7 +203,7 @@ function traiter_echap_script_dist($regs) {
 define('_PROTEGE_BLOCS', ',<(html|code|cadre|frame|script)(\s[^>]*)?>(.*)</\1>,UimsS');
 
 // - pour $source voir commentaire infra (echappe_retour)
-// - pour $no_transform voir le filtre post_autobr dans inc_filtres.php3
+// - pour $no_transform voir le filtre post_autobr dans inc/filtres
 // http://doc.spip.org/@echappe_html
 function echappe_html($letexte, $source='', $no_transform=false,
 $preg='') {
@@ -288,13 +288,16 @@ function echappe_retour_modeles($letexte, $interdire_scripts=false)
 
 // http://doc.spip.org/@couper
 function couper($texte, $taille=50, $suite = '&nbsp;(...)') {
-	if (!strlen($texte) OR $taille <= 0) return '';
+	if (!($length=strlen($texte)) OR $taille <= 0) return '';
 	$offset = 400 + 2*$taille;
-	if (	$offset<strlen($texte)
+	while ($offset<$length
+		AND strlen(preg_replace(",<[^>]+>,Uims","",substr($texte,0,$offset)))<$taille)
+		$offset = 2*$offset;
+	if (	$offset<$length
 			&& ($p_tag_ouvrant = strpos($texte,'<',$offset))!==NULL){
 		$p_tag_fermant = strpos($texte,'>',$offset);
 		if ($p_tag_fermant<$p_tag_ouvrant)
-			$offset += $p_tag_fermant; // prolonger la coupe jusqu'au tag fermant suivant eventuel
+			$offset = $p_tag_fermant+1; // prolonger la coupe jusqu'au tag fermant suivant eventuel
 	}
 	$texte = substr($texte, 0, $offset); /* eviter de travailler sur 10ko pour extraire 150 caracteres */
 

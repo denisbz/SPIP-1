@@ -582,7 +582,7 @@ function balise_PAGINATION_dist($p, $liste='true') {
 	// {truc=chose}{machin=chouette}... histoire de simplifier l'ecriture pour
 	// le webmestre : #MODELE{emb}{autostart=true,truc=1,chose=chouette}
 	$params = array();
-	if ($p->param[0]) {
+	if (isset($p->param[0]) AND $p->param[0]) {
 		while (count($p->param[0])>2){
 			array_unshift($params,array(0=>NULL,1=>array_pop($p->param[0])));
 		}
@@ -593,11 +593,10 @@ function balise_PAGINATION_dist($p, $liste='true') {
 	while(count($params))
 		array_unshift($p->param,array_pop($params));
 	
-	$champ = phraser_arguments_inclure($p, true);
 	// a priori true
 	// si false, le compilo va bloquer sur des syntaxes avec un filtre sans argument qui suit la balise
 	// si true, les arguments simples (sans truc=chose) vont degager
-	$code_contexte = argumenter_inclure($champ, $p->descr, $p->boucles, $p->id_boucle, false);
+	$code_contexte = argumenter_inclure($p->param, true, $p->descr, $p->boucles, $p->id_boucle, false);
 
 	$p->boucles[$b]->numrows = true;
 	$connect = $p->boucles[$b]->sql_serveur;
@@ -609,7 +608,7 @@ function balise_PAGINATION_dist($p, $liste='true') {
 	(isset(\$Numrows['$b']['grand_total']) ?
 		\$Numrows['$b']['grand_total'] : \$Numrows['$b']['total']
 	), $type,
-		\$Pile[0][$modif],"
+		isset(\$Pile[0][$modif])?\$Pile[0][$modif]:0,"
 	. $p->boucles[$b]->total_parties
 	  . ", $liste$__modele," . _q($connect) 
 	  . ", array(" . implode(',',$code_contexte) . ")" 
@@ -753,7 +752,7 @@ function balise_CHEMIN_dist($p) {
 	if (!$arg) {
 		erreur_squelette(_T('zbug_balise_sans_argument', 
 					array('balise' => ' CHEMIN')),
-			$p->bid_boucle);
+			$p->id_boucle);
 		$p->code = "''";
 	} else 
 	  $p->code = 'find_in_path(' . $arg .')';
@@ -1048,11 +1047,14 @@ function balise_INCLUDE_dist($p) {
 	else
 		return balise_INCLURE_dist($p);
 }
+
 // http://doc.spip.org/@balise_INCLURE_dist
 function balise_INCLURE_dist($p) {
-	$champ = phraser_arguments_inclure($p, true);
 	$id_boucle = $p->id_boucle;
-	$_contexte = argumenter_inclure($champ, $p->descr, $p->boucles, $id_boucle, false, false);
+	// la lang n'est pas passe de facon automatique par argumenter
+	// mais le sera pas recuperer_fond, sauf si etoile=>true est passe
+	// en option
+	$_contexte = argumenter_inclure($p->param, true, $p->descr, $p->boucles, $id_boucle, false, false);
 
 	if (isset($_contexte['fond'])) {
 
@@ -1072,26 +1074,19 @@ function balise_INCLURE_dist($p) {
 		$_l = 'array(' . join(",\n\t", $_contexte) .')';
 		if ($flag_env) $_l = "array_merge(\$Pile[0],$_l)";
 
-		$_connect = _q(!$id_boucle ? '' : $p->boucles[$id_boucle]->sql_serveur);
-
 		$_options = array();
 		if (isset($_contexte['ajax'])) $_options[] = "'ajax'=>true";
 		if ($p->etoile) $_options[] = "'etoile'=>true";
 		$_options = "array(" . join(',',$_options) . ")";
 		
-		$p->code = "recuperer_fond('',\$l =  $_l, $_options, $_connect)";
+		$p->code = "recuperer_fond('', $_l, $_options)";
 
-	} else {
-		$n = interprete_argument_balise(1,$p);
-		if (!$n) {
+	} elseif (!isset($_contexte[1])) {
 			erreur_squelette(_T('zbug_balise_sans_argument', 
 					array('balise' => ' INCLURE')),
-			$p->bid_boucle);
+			$p->id_boucle);
 			$p->code = "''";
-		} else 
-		
-			$p->code = '(($c = find_in_path(' . $n . ')) ? spip_file_get_contents($c) : "")';
-	}
+	} else 		$p->code = '(($c = find_in_path(' . $_contexte[1] . ')) ? spip_file_get_contents($c) : "")';
 
 	$p->interdire_scripts = false; // la securite est assuree par recuperer_fond
 	return $p;
@@ -1100,59 +1095,40 @@ function balise_INCLURE_dist($p) {
 // Inclure un modele : #MODELE{modele, params}
 // http://doc.spip.org/@balise_MODELE_dist
 function balise_MODELE_dist($p) {
-	$contexte = array();
+	$_contexte = argumenter_inclure($p->param, true, $p->descr, $p->boucles, $p->id_boucle, false);
 
-	// recupere le premier argument, qui est obligatoirement le nom du modele
-	if (!is_array($p->param))
-		die("erreur de compilation #MODELE{nom du modele}");
+	if (!isset($_contexte[1])) {
+			erreur_squelette(_T('zbug_balise_sans_argument',
+					array('balise' => ' MODELE')),
+			$p->id_boucle);
+			$p->code = "''";
+	} else {
+		$nom = $_contexte[1];
+		unset($_contexte[1]);
 
-	// Transforme l'ecriture du deuxieme param {truc=chose,machin=chouette} en
-	// {truc=chose}{machin=chouette}... histoire de simplifier l'ecriture pour
-	// le webmestre : #MODELE{emb}{autostart=true,truc=1,chose=chouette}
-	if ($p->param[0]) {
-		$params = $p->param[0];
-		unset($p->param[0]);
-		while (count($params)>2){
-			array_unshift($p->param,array(0=>NULL,1=>array_pop($params)));
-			//$p->param[]=array(0=>NULL,1=>array_pop($p->param[0]));
+		// Incoherence dans la syntaxe du contexte. A revoir.
+		// Reserver la cle primaire de la boucle courante si elle existe
+		if ($idb = $p->id_boucle) {
+			if ($primary = $p->boucles[$idb]->primary
+			AND !strpos($primary,',')) {
+				$id = champ_sql($primary, $p);
+				$_contexte[] = "'$primary'=>".$id;
+				$_contexte[] = "'id'=>".$id;
+			}
 		}
-		array_unshift($p->param,$params);
-	}
-	$modele = array_shift($p->param);
-	$nom = strtolower($modele[1][0]->texte);
-	if (!$nom)
-		die("erreur de compilation #MODELE{nom du modele}");
 
-	$champ = phraser_arguments_inclure($p, true); 
+		$connect = '';
+		if (isset($p->boucles[$p->id_boucle]))
+			$connect = $p->boucles[$p->id_boucle]->sql_serveur;
 
-	// a priori true
-	// si false, le compilo va bloquer sur des syntaxes avec un filtre sans argument qui suit la balise
-	// si true, les arguments simples (sans truc=chose) vont degager
-	$_contexte = argumenter_inclure($champ, $p->descr, $p->boucles, $p->id_boucle, false);
-
-	// Si le champ existe dans la pile, on le met dans le contexte
-	// (a priori c'est du code mort ; il servait pour #LESAUTEURS dans
-	// le cas spip_syndic_articles)
-	#$_contexte[] = "'$nom='.".champ_sql($nom, $p);
-
-	// Reserver la cle primaire de la boucle courante si elle existe
-	if ($idb = $p->id_boucle) {
-		if ($primary = $p->boucles[$idb]->primary) {
-			$id = champ_sql($primary, $p);
-			$_contexte[] = "'$primary='.".$id;
-			$_contexte[] = "'id='.".$id;
-		}
-	}
-
-	$connect = $p->boucles[$p->id_boucle]->sql_serveur;
-
-	$page = "\$p = recuperer_fond('modeles/$nom', \$l = array(".join(',', $_contexte).",'recurs='.(++\$recurs), \$GLOBALS['spip_lang']), array('trim'=>true, 'modele'=>true"
+		$page = "recuperer_fond('modeles/' . $nom, array(".join(',', $_contexte).",'recurs'=>(++\$recurs)), array('trim'=>true, 'modele'=>true"
 	. (isset($_contexte['ajax'])?", 'ajax'=>true":'')
 	. "), " . _q($connect) . ")";
 
-	$p->code = "(((\$recurs=(isset(\$Pile[0]['recurs'])?\$Pile[0]['recurs']:0))>=5)? '' : $page)";
+		$p->code = "\n\t(((\$recurs=(isset(\$Pile[0]['recurs'])?\$Pile[0]['recurs']:0))>=5)? '' :\n\t$page)\n";
 
-	$p->interdire_scripts = false; // securite assuree par le squelette
+		$p->interdire_scripts = false; // securite assuree par le squelette
+	}
 
 	return $p;
 }

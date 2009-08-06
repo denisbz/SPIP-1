@@ -27,12 +27,15 @@ include_spip('inc/cookie');
 $exec = _request('exec');
 $reinstall = _request('reinstall')?_request('reinstall'):($exec=='install'?'oui':NULL);
 //
-// Authentification, redefinissable
+// Les scripts d'insallation n'authentifient pas, forcement,
+// alors il faut blinder les variables d'URL
 //
 if (autoriser_sans_cookie($exec)) {
 	if (!isset($reinstall)) $reinstall = 'non';
+	set_request('transformer_xml');
 	$var_auth = true;
 } else {
+	// Authentification, redefinissable
 	$auth = charger_fonction('auth', 'inc');
 	$var_auth = $auth();
 	if ($var_auth) { 
@@ -78,8 +81,14 @@ AND ($GLOBALS['spip_version_base'] != (str_replace(',','.',$GLOBALS['meta']['ver
 // sinon c'est qu'elle a ete interrompue et il faut la reprendre
 
 elseif (isset($GLOBALS['meta']["admin"])) {
-	$n = preg_match('/^(.*)_(\d+)_/', $GLOBALS['meta']["admin"], $l);
-	if (_AJAX OR !isset($_COOKIE['spip_admin'])) {
+	if (preg_match('/^(.*)_(\d+)_/', $GLOBALS['meta']["admin"], $l))
+		list(,$var_f,$n) = $l;
+	if (_AJAX 
+		OR !(
+			isset($_COOKIE['spip_admin'])
+			OR (isset($GLOBALS['visiteur_session']) AND $GLOBALS['visiteur_session']['statut']=='0minirezo')
+			)
+		) {
 		spip_log("Quand la meta admin vaut " .
 			 $GLOBALS['meta']["admin"] .
 			 " seul un admin peut se connecter et sans AJAX." .
@@ -133,6 +142,7 @@ if (!$var_auth AND isset($_COOKIE['spip_lang_ecrire'])
 
 
 // Passer la main aux outils XML a la demande (meme les redac s'ils veulent).
+// mais seulement si on a bien ete auhentifie
 if ($var_f = _request('transformer_xml')) {
 	set_request('var_url', $exec);
 	$exec = $var_f;

@@ -26,7 +26,7 @@ function inc_notes_dist($arg)
 	else return traiter_les_notes($arg);
 }
 
-define('_RACCOURCI_NOTES', ', *\[\[(\s*(<([^>\'"]*)>)?.*?)\]\],msS');
+define('_RACCOURCI_NOTES', ', *\[\[(\s*(<([^>\'"]*)>)?(.*?))\]\],msS');
 
 function traiter_raccourci_notes($letexte)
 {
@@ -40,14 +40,19 @@ function traiter_raccourci_notes($letexte)
 	$mn =  !$marqueur_notes ? '' : ($marqueur_notes.'-');
 	$mes_notes = array();
 	foreach ($m as $r) {
-		list($note_source, $note_texte, $ref, $nom) = $r;
+		list($note_source, $note_all, $ref, $nom, $note_texte) = $r;
 
-		// note nommee ou pas ?
-		if (isset($nom) AND ($nom=='a' OR strpos($note_texte, '</' . $nom .'>') === false)) {
-			$note_texte = preg_replace(",^\s*".preg_quote($ref,",").",ms",'',$note_texte);
-		} 
-		else
+		// reperer une note nommee, i.e. entre chevrons
+		// On leve la Confusion avec une balise en regardant 
+		// si la balise fermante correspondante existe
+		// Cas pathologique:   [[ <a> <a href="x">x</a>]]
+
+		if (!(isset($nom) AND $ref
+		AND ((strpos($note_texte, '</' . $nom .'>') === false)
+		     OR preg_match(",<$nom\W.*</$nom>,", $note_texte)))) {
 			$nom = ++$compt_note;
+			$note_texte = $note_all;
+		}
 
 		// eliminer '%' pour l'attribut id
 		$ancre = $mn . str_replace('%','_', rawurlencode($nom));
@@ -66,12 +71,13 @@ function traiter_raccourci_notes($letexte)
 		}
 
 		// dans le texte, mettre l'appel de note a la place de la note
+		if ($nom) $nom = "$ouvre_ref<a href='#nb$ancre' class='spip_note' rel='footnote'$title$att>$nom</a>$ferme_ref";
+
 		$pos = strpos($letexte, $note_source);
-		$letexte = substr($letexte, 0, $pos) .
-			code_echappement($nom
-				? "$ouvre_ref<a href='#nb$ancre' class='spip_note' rel='footnote'$title$att>$nom</a>$ferme_ref"
-				: '') .
-			substr($letexte, $pos + strlen($note_source));
+		$letexte = substr($letexte, 0, $pos)
+		. code_echappement($nom)
+		. substr($letexte, $pos + strlen($note_source));
+
 	}
 	return array($letexte, $mes_notes);
 }

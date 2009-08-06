@@ -37,9 +37,10 @@ function charger_fonction($nom, $dossier='exec', $continue=false) {
 
 	// passer en minuscules (cf les balises de formulaires)
 	// et inclure le fichier
-	if (!$inc = include_spip($dossier.($d = strtolower($nom))))
+	if (!$inc = include_spip($dossier.($d = strtolower($nom)))
 		// si le fichier truc/machin/nom.php n'existe pas,
 		// la fonction peut etre definie dans truc/machin.php qui regroupe plusieurs petites fonctions
+		AND strlen(dirname($dossier)) AND dirname($dossier)!='.')
 		include_spip(substr($dossier,0,-1));
 	if (function_exists($f)) return $f;
 	if (function_exists($g)) return $g;
@@ -1238,7 +1239,7 @@ function spip_initialisation_suite() {
 	define('_IMG_MAX_WIDTH', 0); # largeur en pixels
 	define('_IMG_MAX_HEIGHT', 0); # hauteur en pixels
 
-	define('_COPIE_LOCALE_MAX_SIZE',2097152); // poids en octet
+	define('_COPIE_LOCALE_MAX_SIZE',16777216); // poids en octet
 
 	// qq chaines standard
 	define('_ACCESS_FILE_NAME', '.htaccess');
@@ -1582,6 +1583,12 @@ function recuperer_fond($fond, $contexte=array(), $options = array(), $connect='
 	// (trim etait le 3eme argument, par defaut a true)
 	if (!is_array($options)) $options = array('trim'=>$options);
 	if (!isset($options['trim'])) $options['trim']=true;
+
+	if (isset($contexte['connect'])){
+		$connect = ($connect ? $connect : $contexte['connect']);
+		unset($contexte['connect']);
+	}
+
 	if (isset($options['modele']))
 		$contexte = creer_contexte_de_modele($contexte);
 

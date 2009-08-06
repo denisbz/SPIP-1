@@ -330,21 +330,20 @@ function critere_collecte_dist($idb,&$boucles, $crit) {
 // http://doc.spip.org/@calculer_critere_arg_dynamique
 function calculer_critere_arg_dynamique($idb, &$boucles, $crit, $suffix='')
 {
-	static $fields = array();
 	$boucle = $boucles[$idb];
-	$arg = calculer_liste($crit, array(), $boucles, $boucle->id_parent);
+	$alt = "('" . $boucle->id_table . '.\' . $x' . $suffix . ')';
 	$var = '$champs_' . $idb;
-	if (!isset($fields[$idb])) {
-		$desc = $boucle->show;
-		$fields[$idb] = implode(',',array_map('_q',array_keys($desc['field'])));
-		$boucles[$idb]->in .= "\n\tstatic $var; $var = array(" . $fields[$idb] .");";
+	$desc = (strpos($boucle->in, "static $var =") !== false);
+	if (!$desc) {
+		$desc = $boucle->show['field'];
+		$desc = implode(',',array_map('_q',array_keys($desc)));
+		$boucles[$idb]->in .= "\n\tstatic $var = array(" . $desc .");";
 	}
-	if ($fields[$idb]) {
-		return	"((\$x = preg_replace(\"/\\W/\",'',$arg)) ? ( in_array(\$x, $var)  ? ('$boucle->id_table.' . \$x$suffix):(\$x$suffix) ) : '')";
-	} else {
-		return "((\$x = preg_replace(\"/\\W/\",'',$arg)) ? ('$boucle->id_table.' . \$x$suffix) : '')";
-	}
+	if ($desc) $alt = "(in_array(\$x, $var)  ? $alt :(\$x$suffix))";
+	$arg = calculer_liste($crit, array(), $boucles, $boucle->id_parent);
+	return	"((\$x = preg_replace(\"/\\W/\",'', $arg)) ? $alt : '')";
 }
+
 // Tri : {par xxxx}
 // http://www.spip.net/@par
 // http://doc.spip.org/@critere_par_dist
@@ -381,7 +380,7 @@ function critere_parinverse($idb, &$boucles, $crit, $sens='') {
 		  $boucle->select[] =  "\".sql_multi('".$texte."', \$GLOBALS['spip_lang']).\"" ;
 		  $order = "'multi'";
 	// par num champ(, suite)
-	      }	else if (preg_match(",^num (.*)$,",$par, $m)) {
+	      }	else if (preg_match(",^num (.*)$,m",$par, $m)) {
 		  $texte = '0+' . $boucle->id_table . '.' . trim($m[1]);
 		  $suite = calculer_liste($tri, array(), $boucles, $boucle->id_parent);
 		  if ($suite !== "''")
@@ -834,11 +833,15 @@ function calculer_critere_infixe($idb, &$boucles, $crit) {
 	// Ne pas utiliser intval, PHP tronquant les Bigint de SQL
 
 	if (($op == '=' OR in_array($op, $table_criteres_infixes))
-	AND preg_match("/^\"'(-?\d+)'\"$/", $val[0], $r)
 	AND (($desc AND isset($desc['field'][$col]) AND sql_test_int($desc['field'][$col]))
-	     OR ($date AND strpos($date[0], '_relatif'))))
-			  $val[0] = $r[1];
-
+	     OR ($date AND strpos($date[0], '_relatif')))) {
+		if (preg_match("/^\"'(-?\d+)'\"$/", $val[0], $r))
+			$val[0] = $r[1];
+		elseif (preg_match('/^sql_quote[(](.*?)(,.*)?[)]\s*$/', $val[0], $r)) {
+		  $r = $r[1] . ($r[2] ? $r[2] : ",''") . ",'int'";
+		  $val[0] = "sql_quote($r)";
+		}
+	}
 	// Indicateur pour permettre aux fonctionx boucle_X de modifier 
 	// leurs requetes par defaut, notamment le champ statut
 	// Ne pas confondre champs de la table principale et des jointures

@@ -13,9 +13,8 @@
 
 if (!defined("_ECRIRE_INC_VERSION")) return;
 
-# Ce fichier doit IMPERATIVEMENT definir la fonction "public_phraser_html"
-# qui transforme un squelette en un tableau d'objets de classe Boucle
-# il est charge par un include calcule dans inc-calcul-squel
+# Ce fichier transforme un squelette en un tableau d'objets de classe Boucle
+# il est charge par un include calcule
 # pour permettre differentes syntaxes en entree
 
 define('BALISE_BOUCLE', '<BOUCLE');
@@ -38,41 +37,6 @@ define('BALISE_IDIOMES',',<:(([a-z0-9_]+):)?([a-z0-9_]+)({([^\|=>]*=[^\|>]*)})?(
 define('SQL_ARGS', '(\([^)]*\))');
 define('CHAMP_SQL_PLUS_FONC', '`?([A-Z_][A-Z_0-9.]*)' . SQL_ARGS . '?`?');
 
-// http://doc.spip.org/@phraser_arguments_inclure
-function phraser_arguments_inclure($p,$rejet_filtres = false){
-	$champ = new Inclure;
-	// on assimile {var=val} a une liste de un argument sans fonction
-	foreach ($p->param as $k => $v) {
-		$var = $v[1][0];
-		if ($var==NULL){
-			if ($rejet_filtres)
-				break; // on est arrive sur un filtre sans argument qui suit la balise
-			else
-				$champ->param[$k] = $v;
-		}
-		else
-		if ($var->type != 'texte') {
-			if ($rejet_filtres)
-				break; // on est arrive sur un filtre sans argument qui suit la balise
-			else
-				erreur_squelette(_T('zbug_parametres_inclus_incorrects'),$var);
-		} else {
-			$champ->param[$k] = $v;
-			preg_match(",^([^=]*)(=)?(.*)$,", $var->texte,$m);
-			if ($m[2]) {
-				$champ->param[$k][0] = $m[1];
-				$val = $m[3];
-				if (preg_match(',^[\'"](.*)[\'"]$,', $val, $m)) $val = $m[1];
-				$champ->param[$k][1][0]->texte = $val;
-			}
-			else
-				$champ->param[$k] = array($m[1]);
-
-		}
-	}
-	return $champ;
-}
-
 // http://doc.spip.org/@phraser_inclure
 function phraser_inclure($texte, $ligne, $result) {
 
@@ -88,8 +52,6 @@ function phraser_inclure($texte, $ligne, $result) {
 		$texte = substr($texte, $p+strlen($match[0]));
 		// on assimile {var=val} a une liste de un argument sans fonction
 		phraser_args($texte,"/>","",$result,$champ);
-		$champ_ = phraser_arguments_inclure($champ);
-		$champ->param = $champ_->param;
 		$texte = substr($champ->apres, strpos($champ->apres, '>')+1);
 		$champ->apres = "";
 		$texte = preg_replace(',^</INCLU[DR]E>,', '', $texte);
@@ -187,9 +149,9 @@ function phraser_champs($texte,$ligne,$result) {
 		$champ->nom_champ = $match[3];
 		$champ->etoile = $match[5];
 		if ($suite[0] == '{') {
-		  phraser_arg($suite, '', array(), $champ);
-		}
-		$texte = $suite;
+			phraser_arg($suite, '', array(), $champ);
+			$texte = ltrim($suite);
+		} else $texte = $suite;
 		$result[] = $champ;
 	  } else {
 	    // faux champ
@@ -226,6 +188,7 @@ function phraser_args($texte, $fin, $sep, $result, &$pointeur_champ) {
   $texte = ltrim($texte);
   while (($texte!=="") && strpos($fin, $texte[0]) === false) {
 	$result = phraser_arg($texte, $sep, $result, $pointeur_champ);
+	$texte = ltrim($texte);
   }
 # mettre ici la suite du texte, 
 # notamment pour que l'appelant vire le caractere fermant si besoin
@@ -242,7 +205,7 @@ function phraser_arg(&$texte, $sep, $result, &$pointeur_champ) {
       $res = array($fonc);
       $args = $suite ;
       // cas du filtre sans argument ou du critere /
-      if (($suite[0] != '{')  || ($fonc  && $fonc[0] == '/'))
+      if (($suite && ($suite[0] != '{'))  || ($fonc  && $fonc[0] == '/'))
 	{ 
 	  // si pas d'argument, alors il faut une fonction ou un double |
 	  if (!$match[1])
@@ -321,7 +284,7 @@ function phraser_arg(&$texte, $sep, $result, &$pointeur_champ) {
       if ($fonc || count($res) > 1) $pointeur_champ->param[] = $res;
       // pour les balises avec faux filtres qui boudent ce dur larbeur
       $pointeur_champ->fonctions[] = array($fonc, substr($suite, 0, $n));
-      $texte = ltrim($args);
+      $texte = $args;
       return $result;
 }
 
@@ -538,8 +501,7 @@ function phraser_critere_infixe($arg1, $arg2, $args, $op, $not, $cond)
 	return $crit;
 }
 
-// http://doc.spip.org/@public_phraser_html
-function public_phraser_html($texte, $id_parent, &$boucles, $nom, $ligne=1) {
+function public_phraser_html_dist($texte, $id_parent, &$boucles, $nom, $ligne=1) {
 
 	$all_res = array();
 
@@ -618,9 +580,8 @@ function public_phraser_html($texte, $id_parent, &$boucles, $nom, $ligne=1) {
 		//
 		if (strncmp($soustype, TYPE_RECURSIF, strlen(TYPE_RECURSIF)) == 0) {
 			$result->type_requete = TYPE_RECURSIF;
-			$args = phraser_arguments_inclure($result);
-			$args = $args->param;
-
+			phraser_criteres($result->param, $result);
+			$args = $result->param;
 			array_unshift($args,
 				      substr($type, strlen(TYPE_RECURSIF)));
 			$result->param = $args;
@@ -683,10 +644,10 @@ function public_phraser_html($texte, $id_parent, &$boucles, $nom, $ligne=1) {
 				$result->altern);
 		}
 
-		$result->avant = public_phraser_html($result->avant, $id_parent,$boucles, $nom, $result->ligne);
-		$result->apres = public_phraser_html($result->apres, $id_parent,$boucles, $nom, $result->ligne+$b+$m);
-		$result->altern = public_phraser_html($result->altern,$id_parent,$boucles, $nom, $result->ligne+$a+$m+$b);
-		$result->milieu = public_phraser_html($milieu, $id_boucle,$boucles, $nom, $result->ligne+$b);
+		$result->avant = public_phraser_html_dist($result->avant, $id_parent,$boucles, $nom, $result->ligne);
+		$result->apres = public_phraser_html_dist($result->apres, $id_parent,$boucles, $nom, $result->ligne+$b+$m);
+		$result->altern = public_phraser_html_dist($result->altern,$id_parent,$boucles, $nom, $result->ligne+$a+$m+$b);
+		$result->milieu = public_phraser_html_dist($milieu, $id_boucle,$boucles, $nom, $result->ligne+$b);
 
 		if (isset($boucles[$id_boucle])) {
 			erreur_squelette(_T('zbug_erreur_boucle_syntaxe'),
