@@ -61,21 +61,21 @@ function filtre_text_csv_dist($t)
 				str_replace("\n", "<br />", 
 					    substr($cell,1,-1))),
 			$t);
-	list($entete, $corps) = split("\n",$t,2);
+	list($entete, $corps) = preg_split(',\n,',$t,2);
 	$caption = '';
 	// sauter la ligne de tete formee seulement de separateurs 
 	if (substr_count($entete, $sep) == strlen($entete)) {
-		list($entete, $corps) = split("\n",$corps,2);
+		list($entete, $corps) = preg_split(',\n,',$corps,2);
 	}
 	// si une seule colonne, en faire le titre
 	if (preg_match("/^([^$sep]+)$sep+\$/", $entete, $l)) {
 			$caption = "\n||" .  $l[1] . "|";
-			list($entete, $corps) = split("\n",$corps,2);
+			list($entete, $corps) = preg_split(',\n,',$corps,2);
 	}
 	// si premiere colonne vide, le raccourci doit quand meme produire <th...
 	if ($entete[0] == $sep) $entete = ' ' . $entete;
 
-	$lignes = split("\n", $corps);
+	$lignes = preg_split(',\n,', $corps);
 	// retrait des lignes vides finales
 	while(preg_match("/^$sep*$/", $lignes[count($lignes)-1]))
 	  unset($lignes[count($lignes)-1]);
@@ -1502,7 +1502,7 @@ function inserer_attribut($balise, $attribut, $val, $texte_backend=true, $vider=
 	if ($vider AND strlen($val)==0)
 		$insert = '';
 	else
-		$insert = " $attribut='$val' ";
+		$insert = " $attribut='$val'";
 
 	list($old, $r) = extraire_attribut($balise, $attribut, true);
 
@@ -1512,11 +1512,11 @@ function inserer_attribut($balise, $attribut, $val, $texte_backend=true, $vider=
 	}
 	else {
 		// preferer une balise " />" (comme <img />)
-		if (preg_match(',[[:space:]]/>,S', $balise))
-			$balise = preg_replace(",[[:space:]]/>,S", $insert."/>", $balise, 1);
+		if (preg_match(',/>,', $balise))
+			$balise = preg_replace(",\s?/>,S", $insert." />", $balise, 1);
 		// sinon une balise <a ...> ... </a>
 		else
-			$balise = preg_replace(",>,", $insert.">", $balise, 1);
+			$balise = preg_replace(",\s?>,S", $insert.">", $balise, 1);
 	}
 
 	return $balise;
@@ -1770,13 +1770,18 @@ function regledetrois($a,$b,$c)
 }
 
 // Fournit la suite de Input-Hidden correspondant aux parametres de
-// l'URL donnee en argument
-// Compatible avec les type_url depuis [13939].
+// l'URL donnee en argument, compatible avec les types_urls depuis [14444].
+// S'il s'agit de l'URL de la page d'appel, 
+// il sait retrouver les parametres implicites des types_urls cryptiques.
+// Si c'est un type_url cryptique sur autre chose, c'est parfois incomplet.
 // cf. tests/filtres/form_hidden.html
 // http://doc.spip.org/@form_hidden
 function form_hidden($action) {
+	static $uri = '';
+  
+	if (!$uri) $uri = url_absolue(nettoyer_uri());
 	$contexte = array();
-	if (!strpos($action, 'page=')
+	if ($uri == url_absolue($action)
 	AND $renommer = generer_url_entite()
 	AND $p = $renommer($action, $contexte)
 	AND $p[3]) {
@@ -1885,13 +1890,6 @@ function filtre_pagination_dist($total, $nom, $position, $pas, $liste = true, $m
 
 	$debut = 'debut'.$nom; // 'debut_articles'
 	$ancre = 'pagination'.$nom; // #pagination_articles
-
-	// Si le contexte ne contient pas de debut_xx, on regarde les globales
-	// (de facon a permettre la pagination dans les modeles) ; c'est une
-	// legere entorse au schema de base (squelette+contexte => page), mais
-	// sinon il faut une usine a gaz pour passer debut_xx dans propre()...
-	if ($position === NULL)
-		$position = _request($debut);
 
 	// n'afficher l'ancre qu'une fois
 	if (!isset($ancres[$ancre]))
@@ -2246,7 +2244,7 @@ function compacte($source, $format = null) {
 	AND preg_match(',\.'.$format.'$,i', $source, $r)
 	AND file_exists($source)) {
 		// si c'est une css, il faut reecrire les url en absolu
-  	if ($type=='css')
+  	if ($format=='css')
   		$source = url_absolue_css($source);
 		
 		$f = basename($source,'.'.$format);

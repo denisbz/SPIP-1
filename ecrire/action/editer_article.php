@@ -172,7 +172,7 @@ function instituer_article($id_article, $c, $calcul_rub=true) {
 		// ou si l'article est deja date dans le futur
 		// En cas de proposition d'un article (mais pas depublication), idem
 		if ($champs['statut'] == 'publie'
-		 OR ($champs['statut'] == 'prop' AND !in_array($statut_ancien, array('publie', 'prop')))
+		 OR ($champs['statut'] == 'prop' AND ($d OR !in_array($statut_ancien, array('publie', 'prop'))))
 		) {
 			if ($d OR strtotime($d=$date)>time())
 				$champs['date'] = $date = $d;
@@ -232,7 +232,8 @@ function instituer_article($id_article, $c, $calcul_rub=true) {
 		array(
 			'args' => array(
 				'table' => 'spip_articles',
-				'id_objet' => $id_article
+				'id_objet' => $id_article,
+				'action'=>'instituer'
 			),
 			'data' => $champs
 		)
@@ -241,7 +242,7 @@ function instituer_article($id_article, $c, $calcul_rub=true) {
 	// Notifications
 	if ($notifications = charger_fonction('notifications', 'inc')) {
 		$notifications('instituerarticle', $id_article,
-			array('statut' => $statut, 'statut_ancien' => $statut_ancien)
+			array('statut' => $statut, 'statut_ancien' => $statut_ancien, 'date'=>$date)
 		);
 	}
 
@@ -274,7 +275,7 @@ function editer_article_heritage($id_article, $id_rubrique, $statut, $champs, $c
 
 	if ($cond) {
 		include_spip('inc/rubriques');
-		$postdate = ($GLOBALS['meta']["post_dates"] == "non" AND isset($champs['date']))?$champs['date']:false;
+		$postdate = ($GLOBALS['meta']["post_dates"] == "non" AND isset($champs['date']) AND (strtotime($champs['date']) < time()))?$champs['date']:false;
 		calculer_rubriques_if($id_rubrique, $champs, $statut, $postdate);
 	}
 }

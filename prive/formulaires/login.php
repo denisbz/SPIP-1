@@ -56,17 +56,18 @@ function formulaires_login_charger_dist($cible="",$login="",$prive=null)
 		$loge = autoriser('ecrire');
 	} else 	$loge = ($GLOBALS['visiteur_session']['auth'] != '');
 
-	// Si on est connecte, envoyer vers la destination
-	// si on en a le droit, et sauf si on y est deja
-
+	// Si on est connecte, appeler traiter()
+	// et lancer la redirection si besoin
 	if (!$valeurs['editable'] AND $loge) {
-		if (!strlen($cible) OR quote_amp($cible) == self())
-			$valeurs['editable'] = false;
-		else {
+		$traiter = charger_fonction('traiter','formulaires/login');
+		$res = $traiter($cible, $login, $prive);
+		$valeurs = array_merge($valeurs,$res);
+
+		if ($res['redirect']){
 			include_spip('inc/headers');
-			$m = redirige_formulaire($cible);
+			$m = redirige_formulaire($res['redirect']);
 			# quand la redirection 302 ci-dessus ne fonctionne pas
-			$valeurs['_deja_loge'] = 
+			$valeurs['_deja_loge'] =
 			"<a href='$cible'>" . _T('login_par_ici') . "</a>$m";
 		}
 	}
@@ -75,6 +76,12 @@ function formulaires_login_charger_dist($cible="",$login="",$prive=null)
 	// s'il est la, c'est probablement un bookmark sur bonjour=oui,
 	// et pas un echec cookie.
 	if ($erreur == 'cookie') $valeurs['echec_cookie'] = ' ';
+	elseif ($erreur){
+		// une erreur d'un SSO indique dans la redirection vers ici
+		// mais il faut se proteger de toute tentative d'injection malveilante
+		include_spip('inc/texte');
+		$valeurs['message_erreur'] = safehtml($erreur);
+	}
 
 	return $valeurs;
 }

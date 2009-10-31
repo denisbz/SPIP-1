@@ -650,7 +650,7 @@ function critere_IN_dist ($idb, &$boucles, $crit)
 {
 
 	list($arg, $op, $val, $col, $where_complement)= calculer_critere_infixe($idb, $boucles, $crit);
-	$in = critere_IN_cas($idb, $boucles, $crit->not ? 'NOT' : '', $arg, $op, $val, $col);
+	$in = critere_IN_cas($idb, $boucles, $crit->not ? 'NOT' : ($crit->exclus? 'exclus' :  ''), $arg, $op, $val, $col);
 //	inserer la condition; exemple: {id_mot ?IN (66, 62, 64)}
 	$where = $in;
 	if ($crit->cond) {
@@ -837,7 +837,7 @@ function calculer_critere_infixe($idb, &$boucles, $crit) {
 	     OR ($date AND strpos($date[0], '_relatif')))) {
 		if (preg_match("/^\"'(-?\d+)'\"$/", $val[0], $r))
 			$val[0] = $r[1];
-		elseif (preg_match('/^sql_quote[(](.*?)(,.*)?[)]\s*$/', $val[0], $r)) {
+		elseif (preg_match('/^sql_quote[(](.*?)(,[^)]*)?[)]\s*$/', $val[0], $r)) {
 		  $r = $r[1] . ($r[2] ? $r[2] : ",''") . ",'int'";
 		  $val[0] = "sql_quote($r)";
 		}
@@ -1068,7 +1068,7 @@ function calculer_vieux_in($params)
 		    if ($v[0]->type != 'texte')
 		      $newp[] = $v;
 		    else {
-		      foreach(split(',', $v[0]->texte) as $x) {
+		      foreach(explode(',', $v[0]->texte) as $x) {
 			$t = new Texte;
 			$t->texte = $x;
 			$newp[] = array($t);

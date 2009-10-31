@@ -32,7 +32,7 @@ function req_pg_dist($addr, $port, $login, $pass, $db='', $prefixe='', $ldap='')
 			$$a = $last_connect[$a];
 		}
 	}
-	@list($host, $p) = split(';', $addr);
+	@list($host, $p) = explode(';', $addr);
 	if ($p >0) $port = " port=$p" ; else $port = '';
 	if ($db) {
 		@$link = pg_connect("host=$host$port dbname=$db user=$login password=$pass", PGSQL_CONNECT_FORCE_NEW);
@@ -113,8 +113,8 @@ function spip_pg_trace_query($query, $serveur='')
 	$t = !isset($_GET['var_profile']) ? 0 : trace_query_start();
 	$r = spip_pg_query_simple($link, $query);
 
-	if ($e = spip_pg_errno())	// Log de l'erreur eventuelle
-		$e .= spip_pg_error($query); // et du fautif
+	if ($e = spip_pg_errno($serveur))	// Log de l'erreur eventuelle
+	  $e .= spip_pg_error($query, $serveur); // et du fautif
 	return $t ? trace_query_end($query, $t, $r, $e, $serveur) : $r;
 }
 
@@ -416,7 +416,7 @@ function spip_pg_selectdb($db, $serveur='',$requeter=true) {
 function spip_pg_listdbs($serveur) {
 	$connexion = $GLOBALS['connexions'][$serveur ? $serveur : 0];
 	$link = $connexion['link'];
-	return spip_pg_query_simple("select * from pg_database");
+	return spip_pg_query_simple($link, "select * from pg_database");
 }
 
 // http://doc.spip.org/@spip_pg_select
@@ -744,7 +744,11 @@ function spip_pg_delete($table, $where='', $serveur='',$requeter=true) {
 	// renvoyer la requete inerte si demandee
 	if (!$requeter) return $query;
 	
-	return spip_pg_trace_query($query, $serveur);
+	$res = spip_pg_trace_query($query, $serveur);
+	if ($res)
+		pg_affected_rows($res);
+	else
+		return false;
 }
 
 // http://doc.spip.org/@spip_pg_insert
@@ -772,8 +776,8 @@ function spip_pg_insert($table, $champs, $valeurs, $desc=array(), $serveur='',$r
 		if ($r2 = pg_fetch_array($r, NULL, PGSQL_NUM))
 			return $r2[0];
 	}
-	$n = spip_pg_errno();
-	$m = spip_pg_error($q);
+	$n = spip_pg_errno($serveur);
+	$m = spip_pg_error($q, $serveur);
 	spip_log("$n $m $q '$r' '$r2'", 'pg'); // trace a minima
 	return -1;
 }
@@ -908,8 +912,8 @@ function spip_pg_replace($table, $values, $desc, $serveur='',$requeter=true) {
 	  $couples = spip_pg_query_simple($link, $q = "UPDATE $table SET $couples WHERE $where");
 #	  spip_log($q);
 	  if (!$couples) {
-	    $n = spip_pg_errno();
-	    $m = spip_pg_error($q);
+	    $n = spip_pg_errno($serveur);
+	    $m = spip_pg_error($q, $serveur);
 	  } else {
 	    $couples = pg_affected_rows($couples);
 	  }
@@ -920,8 +924,8 @@ function spip_pg_replace($table, $values, $desc, $serveur='',$requeter=true) {
 
 		$couples = spip_pg_query_simple($link, $q = "INSERT INTO $table (" . join(',',array_keys($values)) . ') VALUES (' .join(',', $values) . ")$ret");
 	    if (!$couples) {
-	      $n = spip_pg_errno();
-	      $m = spip_pg_error($q);
+		$n = spip_pg_errno($serveur);
+		$m = spip_pg_error($q, $serveur);
 	    } elseif ($ret) {
 	      $r = pg_fetch_array($couples, NULL, PGSQL_NUM);
 	      if ($r[0]) {
@@ -1030,14 +1034,19 @@ function spip_pg_in($val, $valeurs, $not='', $serveur) {
 
 // http://doc.spip.org/@spip_pg_error
 function spip_pg_error($query, $serveur='',$requeter=true) {
-	$s = str_replace('ERROR', 'errcode: 1000 ', pg_last_error());
+	$connexion = $GLOBALS['connexions'][$serveur ? $serveur : 0];
+	$link = $connexion['link'];
+	$s = $link ? pg_last_error($link) : pg_last_error();
+	$s = str_replace('ERROR', 'errcode: 1000 ', $s);
 	if ($s) spip_log("$s - $query", 'pg');
 	return $s;
 }
 
 // http://doc.spip.org/@spip_pg_errno
 function spip_pg_errno($serveur='',$requeter=true) {
-	$s = pg_last_error(); 
+	$connexion = $GLOBALS['connexions'][$serveur ? $serveur : 0];
+	$link = $connexion['link'];
+	$s = $link ? pg_last_error($link) : pg_last_error();
 	if ($s) spip_log("Erreur PG $s");
 	return $s ? 1 : 0;
 }

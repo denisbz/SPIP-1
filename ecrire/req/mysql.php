@@ -126,8 +126,8 @@ function spip_mysql_query($query, $serveur='',$requeter=true) {
 	$t = !isset($_GET['var_profile']) ? 0 : trace_query_start();
 	$r = $link ? mysql_query($query, $link) : mysql_query($query);
 
-	if ($e = spip_mysql_errno())	// Log de l'erreur eventuelle
-		$e .= spip_mysql_error($query); // et du fautif
+	if ($e = spip_mysql_errno($serveur))	// Log de l'erreur eventuelle
+		$e .= spip_mysql_error($query, $serveur); // et du fautif
 	return $t ? trace_query_end($query, $t, $r, $e, $serveur) : $r;
 }
 
@@ -185,8 +185,8 @@ function spip_mysql_select($select, $from, $where='',
 	if (!($res = spip_mysql_query($query, $serveur, $requeter))) {
 		include_spip('public/debug');
 		erreur_requete_boucle(substr($query, 7),
-				      spip_mysql_errno(),
-				      spip_mysql_error($query) );
+				      spip_mysql_errno($serveur),
+				      spip_mysql_error($query, $serveur) );
 	}
 
 	return $res;
@@ -507,9 +507,12 @@ function spip_mysql_countsel($from = array(), $where = array(),
 	return $c;
 }
 
+// Bien specifier le serveur auquel on s'adresse,
+// mais a l'install la globale n'est pas encore completement definie
 // http://doc.spip.org/@spip_mysql_error
 function spip_mysql_error($query='', $serveur='',$requeter=true) {
-	$s = mysql_error();
+	$link = $GLOBALS['connexions'][$serveur ? $serveur : 0]['link'];
+	$s = $link ? mysql_error($link) : mysql_error();
 	if ($s) spip_log("$s - $query", 'mysql');
 	return $s;
 }
@@ -517,7 +520,8 @@ function spip_mysql_error($query='', $serveur='',$requeter=true) {
 // A transposer dans les portages
 // http://doc.spip.org/@spip_mysql_errno
 function spip_mysql_errno($serveur='',$requeter=true) {
-	$s = mysql_errno();
+	$link = $GLOBALS['connexions'][$serveur ? $serveur : 0]['link'];
+	$s = $link ? mysql_errno($link) : mysql_errno();
 	// 2006 MySQL server has gone away
 	// 2013 Lost connection to MySQL server during query
 	if (in_array($s, array(2006,2013)))
@@ -554,8 +558,8 @@ function spip_mysql_insert($table, $champs, $valeurs, $desc='', $serveur='',$req
 	if (mysql_query($query, $link))
 		$r = mysql_insert_id($link);
 	else {
-	  if ($e = spip_mysql_errno())	// Log de l'erreur eventuelle
-		$e .= spip_mysql_error($query); // et du fautif
+	  if ($e = spip_mysql_errno($serveur))	// Log de l'erreur eventuelle
+		$e .= spip_mysql_error($query, $serveur); // et du fautif
 	}
 	return $t ? trace_query_end($query, $t, $r, $e, $serveur) : $r;
 
@@ -639,10 +643,16 @@ function spip_mysql_updateq($table, $champs, $where='', $desc=array(), $serveur=
 
 // http://doc.spip.org/@spip_mysql_delete
 function spip_mysql_delete($table, $where='', $serveur='',$requeter=true) {
-	return spip_mysql_query(
+	$res = spip_mysql_query(
 			  calculer_mysql_expression('DELETE FROM', $table, ',')
 			. calculer_mysql_expression('WHERE', $where),
 			$serveur, $requeter);
+	if ($res){
+		$link = $GLOBALS['connexions'][$serveur ? $serveur : 0]['link'];
+		return $link ? mysql_affected_rows($link) : mysql_affected_rows();
+	}
+	else
+		return false;
 }
 
 // http://doc.spip.org/@spip_mysql_replace
